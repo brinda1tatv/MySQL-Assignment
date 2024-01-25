@@ -1,0 +1,208 @@
+1. Procedure : -
+CREATE DEFINER=`root`@`localhost` PROCEDURE `spFreightAvg`(IN pCustomerId VARCHAR(10), OUT pAvgFreight DECIMAL(10,2))
+BEGIN
+    SELECT AVG(Freight) INTO pAvgFreight
+    FROM `orders`
+    WHERE CustomerID = pCustomerId;
+END
+
+Trigger : -
+DELIMITER //
+
+-- Trigger for BEFORE INSERT
+CREATE TRIGGER FreightAverageBeforeInsert
+BEFORE INSERT ON orders
+FOR EACH ROW
+BEGIN
+    DECLARE Freight DECIMAL(10,2);
+    DECLARE avgFreight DECIMAL(10,2);
+    
+    SET Freight = NEW.Freight;
+    
+    CALL spFreightAvg(NEW.CustomerID, avgFreight);
+    
+    IF avgFreight < Freight THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Freight exceeds the average freight';
+    END IF;
+END //
+
+// Change delimiter back to semicolon
+DELIMITER ;
+
+-- Trigger for BEFORE UPDATE
+DELIMITER //
+
+CREATE TRIGGER FreightAverageBeforeUpdate
+BEFORE UPDATE ON orders
+FOR EACH ROW
+BEGIN
+    DECLARE Freight DECIMAL(10,2);
+    DECLARE avgFreight DECIMAL(10,2);
+    
+    SET Freight = NEW.Freight;
+    
+    CALL spFreightAvg(NEW.CustomerID, avgFreight);
+    
+    IF avgFreight < Freight THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Freight exceeds the average freight';
+    END IF;
+END //
+
+// Change delimiter back to semicolon
+DELIMITER ;
+
+
+2. USE `northwindfinal`;
+DROP procedure IF EXISTS `q2`;
+
+USE `northwindfinal`;
+DROP procedure IF EXISTS `northwindfinal`.`q2`;
+;
+
+DELIMITER $$
+USE `northwindfinal`$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `q2`()
+BEGIN
+SELECT 
+    orders.ShipCountry AS Country,
+    orders.EmployeeID AS EmployeeID,
+    SUM(orderdetails.UnitPrice * orderdetails.Quantity  - ((orderdetails.UnitPrice * orderdetails.Discount) / 100)) AS Sales
+FROM
+    orders
+        INNER JOIN
+    orderdetails ON orders.OrderID = orderdetails.OrderID
+GROUP BY orders.EmployeeID , orders.ShipCountry
+ORDER BY orders.ShipCountry , orders.EmployeeID ASC;
+END$$
+
+DELIMITER ;
+;
+
+call q2();
+
+
+3. USE `northwindfinal`;
+DROP procedure IF EXISTS `q3`;
+
+DELIMITER $$
+USE `northwindfinal`$$
+CREATE PROCEDURE `q3` ()
+BEGIN
+SELECT 
+    MAX(YEAR(OrderDate)) AS Years, COUNT(OrderID) AS SalesByYear
+FROM
+    orders
+GROUP BY YEAR(OrderDate); 
+END$$
+
+DELIMITER ;
+
+call q3();
+
+
+4. USE `northwindfinal`;
+DROP procedure IF EXISTS `q4`;
+
+USE `northwindfinal`;
+DROP procedure IF EXISTS `northwindfinal`.`q4`;
+;
+
+DELIMITER $$
+USE `northwindfinal`$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `q4`()
+BEGIN
+SELECT 
+    CategoryID, SUM(UnitPrice * UnitsOnOrder)
+FROM
+    products
+GROUP BY CategoryID;
+END$$
+
+DELIMITER ;
+;
+
+call q4();
+
+
+5. USE `northwindfinal`;
+DROP procedure IF EXISTS `q5`;
+
+DELIMITER $$
+USE `northwindfinal`$$
+CREATE PROCEDURE `q5` ()
+BEGIN
+SELECT 
+    ProductName, UnitPrice
+FROM
+    products
+ORDER BY UnitPrice DESC
+LIMIT 10;
+END$$
+
+DELIMITER ;
+
+call q5();
+
+6. USE `northwindfinal`;
+DROP procedure IF EXISTS `q6`;
+
+USE `northwindfinal`;
+DROP procedure IF EXISTS `northwindfinal`.`q6`;
+;
+
+DELIMITER $$
+USE `northwindfinal`$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `q6`(IN OrderID INT, IN CustomerID VARCHAR(5), IN EmployeeID INT, IN OrderDate DATETIME, IN RequiredDate DATETIME, IN ShippedDateN DATETIME, IN ShipVia INT, IN Freight DECIMAL(10,4), IN ShipName VARCHAR(40), IN ShipAddress VARCHAR(60), IN ShipCity VARCHAR(15), IN ShipRegion VARCHAR(15), IN ShipPostalCode VARCHAR(10), IN ShipCountry VARCHAR(15), IN Productid INT, IN Quantity SMALLINT)
+BEGIN
+DECLARE pid INT;
+DECLARE Uprice decimal(10,4); 
+SET pid = Productid;
+
+SET uprice = (SELECT max(UnitPrice) 
+                   FROM orderdetails 
+                   WHERE pid = Productid group by Productid);
+
+INSERT INTO orders(OrderID, CustomerID, EmployeeID, OrderDate, RequiredDate, ShippedDate, ShipVia, Freight, ShipName, ShipAddress, ShipCity, ShipRegion, ShipPostalCode, ShipCountry) values(OrderID, CustomerID, EmployeeID, OrderDate, RequiredDate, ShippedDate, ShipVia, Freight, ShipName, ShipAddress, ShipCity, ShipRegion, ShipPostalCode, ShipCountry);
+INSERT INTO orderdetails(OrderId, Productid, UnitPrice, Quantity, Discount) values (OrderId, pid, uprice, Quantity, Discount);
+END$$
+
+DELIMITER ;
+;
+
+call q6(3, 'AROUT', 1, null, null, null, 1, 31.3800, 'TomsSpezialitten', 'Luisenstr48', 'Mnster', null, 51100, 'Germany', 1, 10);
+
+
+7. USE `northwindfinal`;
+DROP procedure IF EXISTS `q7`;
+
+USE `northwindfinal`;
+DROP procedure IF EXISTS `northwindfinal`.`q7`;
+;
+
+DELIMITER $$
+USE `northwindfinal`$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `q7`(IN OID INT, IN PID INT, IN Qty SMALLINT)
+BEGIN
+
+DECLARE unitsononreder smallint;
+
+SET unitsononreder = (SELECT MAX(Quantity)
+                   FROM orderdetails 
+                   WHERE ProductID = PID);
+                   
+UPDATE orderdetails 
+SET OrderID = OID, Quantity = QTY 
+WHERE OrderID = OID;
+
+UPDATE products 
+SET products.UnitsOnOrder = (unitsononreder + Qty)
+WHERE products.ProductID = PID;
+
+END$$
+
+DELIMITER ;
+;
+
+call q7(1, 1, 20);
